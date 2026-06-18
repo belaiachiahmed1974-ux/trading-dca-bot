@@ -20,19 +20,38 @@ jobs:
           pip install --upgrade pip setuptools wheel
           pip install "buildozer>=1.5.0" "cython<3.0.0" kivy
 
+      - name: Download and Fix Android sdkmanager Manually
+        run: |
+          # 1. إنشاء المجلد القديم الذي يصر Buildozer على القراءة منه
+          mkdir -p ~/.buildozer/android/platform/android-sdk/tools/bin/
+          mkdir -p ~/.buildozer/android/platform/android-sdk/build-tools/33.0.0/
+          
+          # 2. ربط أداة aidl بالمسار المتوقع
+          sudo ln -sf /usr/bin/aidl ~/.buildozer/android/platform/android-sdk/build-tools/33.0.0/aidl
+          
+          # 3. تحميل حزمة أدوات أندرويد الرسمية وفك ضغط ملف sdkmanager داخل مسار Buildozer مباشرة
+          wget https://dl.google.com/android/repository/commandlinetools-linux-9477386_latest.zip -O cmdline.zip
+          unzip -q cmdline.zip -d cmdline_extracted
+          
+          # 4. نقل الملفات إلى المسار الذي يبحث عنه الخطأ تماماً
+          cp -r cmdline_extracted/cmdline-tools/* ~/.buildozer/android/platform/android-sdk/tools/
+          # عمل نسخة إضافية داخل bin لضمان عملها أياً كان المسار المطلق
+          mkdir -p ~/.buildozer/android/platform/android-sdk/tools/bin/
+          cp cmdline_extracted/cmdline-tools/bin/sdkmanager ~/.buildozer/android/platform/android-sdk/tools/bin/sdkmanager
+          chmod +x ~/.buildozer/android/platform/android-sdk/tools/bin/sdkmanager
+          
+          # تنظيف الملفات المؤقتة لتوفير المساحة
+          rm -rf cmdline.zip cmdline_extracted
+
       - name: Initialize Buildozer Config
         run: |
           buildozer init
-          # ضبط متطلبات الحزم والخدمة الخلفية للمنصة
+          # إعداد التوافقية مع المكتبات والخدمة الخلفية للبوت
           sed -i 's/^requirements =.*/requirements = python3, kivy, ccxt, pandas, datetime, openssl, requests, certifi, urllib3, idna/' buildozer.spec
           sed -i 's/^#android.services =.*/android.services = ServiceService:service.py/' buildozer.spec
           sed -i 's/^#android.permissions =.*/android.permissions = INTERNET, FOREGROUND_SERVICE, WAKE_LOCK, RECEIVE_BOOT_COMPLETED/' buildozer.spec
           
-          # فرض استخدام مسارات الـ SDK والـ NDK الرسمية المدمجة في سيرفرات GitHub لضمان التوافق التام
-          sed -i "s|^#android.sdk_path =.*|android.sdk_path = ${ANDROID_HOME}|" buildozer.spec
-          sed -i "s|^#android.ndk_path =.*|android.ndk_path = ${ANDROID_NDK_HOME}|" buildozer.spec
-          
-          # ضبط نسخ الـ API المتوافقة مع السيرفر
+          # ضبط نسخ الـ API والرخص لتتوافق مع الأداة المحملة
           sed -i 's/^#android.api =.*/android.api = 33/' buildozer.spec
           sed -i 's/^#android.minapi =.*/android.minapi = 24/' buildozer.spec
           sed -i 's/^#android.ndk_api =.*/android.ndk_api = 24/' buildozer.spec
@@ -40,7 +59,6 @@ jobs:
 
       - name: Build Android APK
         run: |
-          # تشغيل البناء المباشر باستخدام البيئة المهيأة
           buildozer android debug
           
       - name: Upload APK Artifact
