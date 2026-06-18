@@ -5,12 +5,12 @@ jobs:
   build:
     runs-on: ubuntu-latest
     steps:
-      - uses: actions/checkout@v3
+      - uses: actions/checkout@v4
 
       - name: Set up Python
-        uses: actions/setup-python@v4
+        uses: actions/setup-python@v5
         with:
-          python-level: '3.10'
+          python-version: '3.10'
 
       - name: Install Buildozer and Dependencies
         run: |
@@ -22,14 +22,14 @@ jobs:
       - name: Initialize Buildozer and Build APK
         run: |
           buildozer init
-          # تعديل المتطلبات تلقائياً لتشمل البوت والخدمة الخلفية
+          # تعديل الإعدادات لتتوافق مع مكاتب التداول والخدمة الخلفية
           sed -i 's/^requirements =.*/requirements = python3, kivy, ccxt, pandas, datetime, openssl, requests, certifi, urllib3, idna/' buildozer.spec
           sed -i 's/^#android.services =.*/android.services = ServiceService:service.py/' buildozer.spec
           sed -i 's/^#android.permissions =.*/android.permissions = INTERNET, FOREGROUND_SERVICE, WAKE_LOCK, RECEIVE_BOOT_COMPLETED/' buildozer.spec
           buildozer -v android debug
 
       - name: Upload APK Artifact
-        uses: actions/upload-artifact@v3
+        uses: actions/upload-artifact@v4
         with:
           name: TradingBot-APK
           path: bin/*.apk
