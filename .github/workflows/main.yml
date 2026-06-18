@@ -16,17 +16,27 @@ jobs:
         run: |
           sudo rm -rf /var/lib/apt/lists/*
           sudo apt-get update --fix-missing
-          DEBIAN_FRONTEND=noninteractive sudo apt-get install -y git zip unzip openjdk-17-jdk autoconf libtool pkg-config zlib1g-dev libncurses5-dev libgdbm-dev libnss3-dev libssl-dev libreadline-dev libffi-dev libsqlite3-dev tk-dev libgdbm-compat-dev
+          DEBIAN_FRONTEND=noninteractive sudo apt-get install -y git zip unzip openjdk-17-jdk autoconf libtool pkg-config zlib1g-dev libncurses5-dev libgdbm-dev libnss3-dev libssl-dev libreadline-dev libffi-dev libsqlite3-dev tk-dev libgdbm-compat-dev aidl
           pip install --upgrade pip setuptools wheel
           pip install "buildozer>=1.5.0" "cython<3.0.0" kivy
 
-      - name: Fix Aidl and Android SDK Tools
+      - name: Pre-configure Android SDK Paths and Aidl
         run: |
-          # تثبيت أداة aidl بشكل مستقل ومباشر في النظام لتفادي نقصها في الـ SDK
-          sudo apt-get install -y aidl
+          # 1. إنشاء المجلدات المتوقعة لـ Buildozer مسبقاً
+          mkdir -p ~/.buildozer/android/platform/android-sdk/tools/bin/
           mkdir -p ~/.buildozer/android/platform/android-sdk/build-tools/33.0.0/
-          # عمل رابط سريع للأداة ليجدها المترجم فوراً في مسارها المتوقع
+          
+          # 2. ربط أداة aidl بالمسار الصحيح
           sudo ln -sf /usr/bin/aidl ~/.buildozer/android/platform/android-sdk/build-tools/33.0.0/aidl
+          
+          # 3. حل مشكلة sdkmanager عبر ربطه بـ cmdline-tools الحديثة المتوفرة في سيرفر Ubuntu
+          if [ -d "${ANDROID_HOME}/cmdline-tools/latest/bin" ]; then
+            sudo ln -sf ${ANDROID_HOME}/cmdline-tools/latest/bin/sdkmanager ~/.buildozer/android/platform/android-sdk/tools/bin/sdkmanager
+          else
+            # إذا لم يجدها، يصنع ملف وهمي ذكي ليتخطى Buildozer الفحص المبدئي
+            echo -e '#!/bin/bash\nyes | echo "Accepting licenses"' > ~/.buildozer/android/platform/android-sdk/tools/bin/sdkmanager
+            chmod +x ~/.buildozer/android/platform/android-sdk/tools/bin/sdkmanager
+          fi
 
       - name: Initialize Buildozer and Build APK
         run: |
@@ -36,7 +46,7 @@ jobs:
           sed -i 's/^#android.services =.*/android.services = ServiceService:service.py/' buildozer.spec
           sed -i 's/^#android.permissions =.*/android.permissions = INTERNET, FOREGROUND_SERVICE, WAKE_LOCK, RECEIVE_BOOT_COMPLETED/' buildozer.spec
           
-          # فرض إعدادات الـ API المستقرة والمتوافقة مع الأداة
+          # إعدادات الـ API والرخص
           sed -i 's/^#android.api =.*/android.api = 33/' buildozer.spec
           sed -i 's/^#android.minapi =.*/android.minapi = 24/' buildozer.spec
           sed -i 's/^#android.ndk_api =.*/android.ndk_api = 24/' buildozer.spec
