@@ -10,27 +10,32 @@ jobs:
       - name: Set up Python
         uses: actions/setup-python@v5
         with:
-          python-version: '3.11'
+          python-version: '3.10'
 
       - name: Fix APT and Install Dependencies
         run: |
           sudo rm -rf /var/lib/apt/lists/*
           sudo apt-get update --fix-missing
-          # تم حذف حزمة libmpdec-dev لحل المشكلة نهائياً وتمرير التثبيت بنجاح
           DEBIAN_FRONTEND=noninteractive sudo apt-get install -y git zip unzip openjdk-17-jdk autoconf libtool pkg-config zlib1g-dev libncurses5-dev libgdbm-dev libnss3-dev libssl-dev libreadline-dev libffi-dev libsqlite3-dev tk-dev libgdbm-compat-dev libreoffice-dev
           pip install --upgrade pip setuptools wheel
-          pip install buildozer cython kivy
+          pip install "buildozer>=1.5.0" "cython<3.0.0" kivy
 
       - name: Initialize Buildozer and Build APK
         run: |
           buildozer init
-          # إعداد التوافقية مع المكتبات والخدمة الخلفية للبوت
+          # ضبط الإعدادات بدقة لتفادي تضارب الحزم ونسخ الـ NDK
           sed -i 's/^requirements =.*/requirements = python3, kivy, ccxt, pandas, datetime, openssl, requests, certifi, urllib3, idna/' buildozer.spec
           sed -i 's/^#android.services =.*/android.services = ServiceService:service.py/' buildozer.spec
           sed -i 's/^#android.permissions =.*/android.permissions = INTERNET, FOREGROUND_SERVICE, WAKE_LOCK, RECEIVE_BOOT_COMPLETED/' buildozer.spec
           
-          # تخطي شروط الاندرويد تلقائياً لمنع أي تعليق
-          yes | buildozer -v android debug
+          # فرض استخدام نسخ مستقرة ومتوافقة من أدوات أندرويد
+          sed -i 's/^#android.api =.*/android.api = 33/' buildozer.spec
+          sed -i 's/^#android.minapi =.*/android.minapi = 24/' buildozer.spec
+          sed -i 's/^#android.ndk_api =.*/android.ndk_api = 24/' buildozer.spec
+          sed -i 's/^#android.accept_sdk_license =.*/android.accept_sdk_license = True/' buildozer.spec
+          
+          # البناء بدون استخدام "yes" لتفادي كسر الأنابيب (Broken pipe) مع قبول الرخص تلقائياً
+          buildozer android debug
           
       - name: Upload APK Artifact
         uses: actions/upload-artifact@v4
