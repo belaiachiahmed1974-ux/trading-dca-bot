@@ -1,68 +1,56 @@
 name: Build Android APK
-on: [push, workflow_dispatch]
+
+on:
+  push:
+    branches: [ main ]
+  pull_request:
+    branches: [ main ]
 
 jobs:
   build:
     runs-on: ubuntu-latest
+    
     steps:
-      - uses: actions/checkout@v4
+    - name: Checkout code
+      uses: actions/checkout@v4
 
-      - name: Set up Python
-        uses: actions/setup-python@v5
-        with:
-          python-version: '3.10'
+    - name: Set up Python
+      uses: actions/setup-python@v5
+      with:
+        python-version: '3.10'
 
-      - name: Fast Install Dependencies
-        run: |
-          sudo rm -rf /var/lib/apt/lists/*
-          sudo apt-get update --fix-missing
-          DEBIAN_FRONTEND=noninteractive sudo apt-get install -y git zip unzip openjdk-17-jdk autoconf libtool pkg-config zlib1g-dev libncurses5-dev libgdbm-dev libnss3-dev libssl-dev libreadline-dev libffi-dev libsqlite3-dev tk-dev libgdbm-compat-dev aidl
-          pip install --upgrade pip setuptools wheel
-          pip install "buildozer>=1.5.0" "cython<3.0.0" kivy
+    - name: Set up JDK
+      uses: actions/setup-java@v4
+      with:
+        java-version: '11'
+        distribution: 'temurin'
 
-      - name: Download and Fix Android sdkmanager Manually
-        run: |
-          # 1. إنشاء المجلد القديم الذي يصر Buildozer على القراءة منه
-          mkdir -p ~/.buildozer/android/platform/android-sdk/tools/bin/
-          mkdir -p ~/.buildozer/android/platform/android-sdk/build-tools/33.0.0/
-          
-          # 2. ربط أداة aidl بالمسار المتوقع
-          sudo ln -sf /usr/bin/aidl ~/.buildozer/android/platform/android-sdk/build-tools/33.0.0/aidl
-          
-          # 3. تحميل حزمة أدوات أندرويد الرسمية وفك ضغط ملف sdkmanager داخل مسار Buildozer مباشرة
-          wget https://dl.google.com/android/repository/commandlinetools-linux-9477386_latest.zip -O cmdline.zip
-          unzip -q cmdline.zip -d cmdline_extracted
-          
-          # 4. نقل الملفات إلى المسار الذي يبحث عنه الخطأ تماماً
-          cp -r cmdline_extracted/cmdline-tools/* ~/.buildozer/android/platform/android-sdk/tools/
-          # عمل نسخة إضافية داخل bin لضمان عملها أياً كان المسار المطلق
-          mkdir -p ~/.buildozer/android/platform/android-sdk/tools/bin/
-          cp cmdline_extracted/cmdline-tools/bin/sdkmanager ~/.buildozer/android/platform/android-sdk/tools/bin/sdkmanager
-          chmod +x ~/.buildozer/android/platform/android-sdk/tools/bin/sdkmanager
-          
-          # تنظيف الملفات المؤقتة لتوفير المساحة
-          rm -rf cmdline.zip cmdline_extracted
+    - name: Setup Android SDK
+      uses: android-actions/setup-android@v3
+      with:
+        api-level: 31
+        build-tools: '33.0.0'
+        ndk: '27.3.13750724'
 
-      - name: Initialize Buildozer Config
-        run: |
-          buildozer init
-          # إعداد التوافقية مع المكتبات والخدمة الخلفية للبوت
-          sed -i 's/^requirements =.*/requirements = python3, kivy, ccxt, pandas, datetime, openssl, requests, certifi, urllib3, idna/' buildozer.spec
-          sed -i 's/^#android.services =.*/android.services = ServiceService:service.py/' buildozer.spec
-          sed -i 's/^#android.permissions =.*/android.permissions = INTERNET, FOREGROUND_SERVICE, WAKE_LOCK, RECEIVE_BOOT_COMPLETED/' buildozer.spec
-          
-          # ضبط نسخ الـ API والرخص لتتوافق مع الأداة المحملة
-          sed -i 's/^#android.api =.*/android.api = 33/' buildozer.spec
-          sed -i 's/^#android.minapi =.*/android.minapi = 24/' buildozer.spec
-          sed -i 's/^#android.ndk_api =.*/android.ndk_api = 24/' buildozer.spec
-          sed -i 's/^#android.accept_sdk_license =.*/android.accept_sdk_license = True/' buildozer.spec
+    - name: Install Android components
+      run: |
+        yes | sdkmanager --licenses
+        sdkmanager "platforms;android-31"
+        sdkmanager "build-tools;33.0.0"
+        sdkmanager "platform-tools"
 
-      - name: Build Android APK
-        run: |
-          buildozer android debug
-          
-      - name: Upload APK Artifact
-        uses: actions/upload-artifact@v4
-        with:
-          name: TradingBot-APK
-          path: bin/*.apk
+    - name: Install Buildozer
+      run: |
+        pip install --upgrade pip
+        pip install buildozer
+        pip install cython
+
+    - name: Build APK
+      run: |
+        buildozer android debug deploy
+
+    - name: Upload APK
+      uses: actions/upload-artifact@v4
+      with:
+        name: TradingBot-APK
+        path: bin/*.apk
